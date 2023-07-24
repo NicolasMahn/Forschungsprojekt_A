@@ -8,14 +8,33 @@ Q = np.zeros((num_jobs, num_actions))
 
 jobs = [15, 10, 6, 20, 12]
 
-learning_rate = 0.1
-discount_factor = 0.9
-epsilon = 0.5
-min_epsilon = 0.1
-epsilon_decay = 0.85
+learning_rate = 0.0001
+discount_factor = 0.8
+epsilon = 0.8
+min_epsilon = 0
+epsilon_decay = 0.9999
 
-num_episodes = 500
+num_episodes = 100000
 
+
+
+def calculate_average_sublist(list_of_lists):
+    if not list_of_lists:
+        return None
+
+    num_sublists = len(list_of_lists)
+    sublist_length = len(list_of_lists[0])
+
+    averages = [0] * sublist_length
+
+    for sublist in list_of_lists:
+        for i in range(sublist_length):
+            if len(sublist) > i:
+                averages[i] += sublist[i]
+
+    averages = [average / num_sublists for average in averages]
+
+    return averages
 
 def argmax(elements):
     # print(f"elements: {elements}")
@@ -58,42 +77,53 @@ def get_possible_actions(job_list, history_list):
     return list(set(job_list) - set(history_list))
 
 
-data_fitness_curve = []
+fitness_curves = []
 
-for episode in range(num_episodes):
-    history = []
-    sum_rewards = 0
-    for state in range(num_jobs):
-        possible_actions = get_possible_actions(jobs, history)
-        if np.random.random() > epsilon:
-            Q_state_temp = list(Q[state])
-            while True:
+for execution in range(10):
+    np.random.seed(execution)
+
+    data_fitness_curve = []
+
+    for episode in range(num_episodes):
+        history_states = []
+        history_actions = []
+        return_ = 0
+        history_actions_index = []
+
+        for state in range(num_jobs):
+            possible_actions = get_possible_actions(jobs, history_actions)
+            if np.random.random() > epsilon:
+                Q_state_temp = Q[state]
                 action_index = argmax(Q_state_temp)
                 action = jobs[action_index]
-                if action in possible_actions:
-                    break
-                else:
-                    Q_state_temp[action_index] = -1000
-        else:
-            action = possible_actions[np.random.randint(0, len(possible_actions))]
-            action_index = jobs.index(action)
-        history.append(action)
+                if action not in possible_actions:
+                    action = possible_actions[np.random.randint(0, len(possible_actions))]
+                    action_index = jobs.index(action)
+            else:
+                action = possible_actions[np.random.randint(0, len(possible_actions))]
+                action_index = jobs.index(action)
+            history_actions.append(action)
+            history_actions_index.append(action_index)
+            history_states.append(state)
 
-        reward = calculate_reward(history)
-        sum_rewards += reward
+            reward = calculate_reward(history_actions)
+            return_ += reward
 
-        try:
-            Q[state, action_index] += learning_rate * (reward + discount_factor * np.max(Q[state + 1]) - Q[state, action_index])
-        except Exception:
-            None
+        return_sum = 0
+        for i in range(len(history_actions)):
+            Q[history_states[i], history_actions_index[i]] += \
+                learning_rate * (return_ - Q[history_states[i], history_actions_index[i]])
+
+        #print("History: ", history_actions)
+        epsilon = max(min_epsilon, epsilon * epsilon_decay)
+        data_fitness_curve.append(return_)
+
+    fitness_curves.append(data_fitness_curve)
+    print(execution)
 
 
-    print("History: ", history)
-    epsilon = max(min_epsilon, epsilon * epsilon_decay)
-    data_fitness_curve.append(sum_rewards)
-
-
-show_fitness_curve(data_fitness_curve)
+show_fitness_curve(calculate_average_sublist(fitness_curves), title="Average Fitness Curve",
+                       subtitle=f"DQN average performance of {len(fitness_curves)} executions")
 
 print("Optimales Ergebnis: ")
 history_final = []
@@ -112,3 +142,5 @@ for state in range(num_jobs):
 
 print("History: ", history_final)
 print("Q-Table: ", Q)
+
+
